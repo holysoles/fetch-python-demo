@@ -2,6 +2,7 @@ import yaml
 import requests
 import time
 from collections import defaultdict
+import threading
 
 # Function to load configuration from the YAML file
 def load_config(file_path):
@@ -24,11 +25,7 @@ def check_health(endpoint):
     except requests.RequestException:
         return "DOWN"
 
-# Main function to monitor endpoints
-def monitor_endpoints(file_path):
-    config = load_config(file_path)
-    domain_stats = defaultdict(lambda: {"up": 0, "total": 0})
-
+def check_health_loop(config: dict, domain_stats: defaultdict):
     while True:
         for endpoint in config:
             domain_with_port = endpoint["url"].split("//")[-1].split("/")[0]
@@ -38,14 +35,24 @@ def monitor_endpoints(file_path):
             domain_stats[domain]["total"] += 1
             if result == "UP":
                 domain_stats[domain]["up"] += 1
+        time.sleep(15)
 
+# Main function to monitor endpoints
+def monitor_endpoints(file_path):
+    config = load_config(file_path)
+    domain_stats = defaultdict(lambda: {"up": 0, "total": 0})
+
+    check_health_thread = threading.Thread(target=check_health_loop, args=(config, domain_stats))
+    check_health_thread.start()
+
+    while True:
+        time.sleep(15)
         # Log cumulative availability percentages
         for domain, stats in domain_stats.items():
             availability = round(100 * stats["up"] / stats["total"])
             print(f"{domain} has {availability}% availability percentage")
 
         print("---")
-        time.sleep(15)
 
 # Entry point of the program
 if __name__ == "__main__":
