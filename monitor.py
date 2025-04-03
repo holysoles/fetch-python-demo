@@ -1,18 +1,26 @@
-import yaml
-import requests
+# pylint: disable=missing-module-docstring
+import sys
 import time
 from collections import defaultdict
 import threading
 import os
 import logging
+import yaml
+import requests
+
 
 class ConfigException(Exception):
-    pass
+    """
+    An exception class that categorizes issues encountered when parsing or validating 
+    provided configuration
+    """
 
-# Function to load configuration from the YAML file
 def load_config(file_path: str) -> list[dict]:
+    """
+    Function to load configuration from the YAML file
+    """
     config = []
-    with open(file_path, 'r') as file:
+    with open(file_path, "r", encoding="utf8") as file:
         config = yaml.safe_load(file)
 
     # perform config validation
@@ -20,37 +28,49 @@ def load_config(file_path: str) -> list[dict]:
         raise ConfigException("invalid config: provided yaml file is not an array")
     for endpoint in config:
         try:
-            _ = endpoint['name']
+            _ = endpoint["name"]
         except KeyError as e:
-            raise ConfigException("invalid config: an endpoint does not have required 'name' key") from e
+            raise ConfigException(
+                "invalid config: an endpoint does not have required 'name' key"
+            ) from e
         try:
-            _ = endpoint['url']
+            _ = endpoint["url"]
         except KeyError as e:
-            raise ConfigException(f"invalid config: endpoint name '{endpoint['name']}' does not have required 'url' key") from e 
+            raise ConfigException(
+                f"invalid config: endpoint '{endpoint['name']}' does not have required 'url' key"
+            ) from e
 
     return config
 
-# Function to perform health checks
+
 def check_health(endpoint: dict) -> str:
-    url = endpoint['url']
-    method = endpoint.get('method', "GET")
-    headers = endpoint.get('headers')
-    body = endpoint.get('body')
+    """
+    Function to perform health checks
+    """
+    url = endpoint["url"]
+    method = endpoint.get("method", "GET")
+    headers = endpoint.get("headers")
+    body = endpoint.get("body")
 
     try:
-        response = requests.request(method, url, headers=headers, json=body, timeout=0.5)
+        response = requests.request(
+            method, url, headers=headers, json=body, timeout=0.5
+        )
         if 200 <= response.status_code < 300:
             return "UP"
-        else:
-            return "DOWN"
+        return "DOWN"
     except requests.exceptions.ReadTimeout:
-        logging.debug(f"timeout during availability check to '{url}'")
-        return 'DOWN'
-    except requests.RequestException as e:
-        logging.debug(f"error requesting url '{url}'", exc_info=True)
+        logging.debug("timeout during availability check to %s", url)
+        return "DOWN"
+    except requests.RequestException:
+        logging.debug("error requesting url '%s'", url, exc_info=True)
         return "DOWN"
 
+
 def check_health_loop(config: dict, domain_stats: defaultdict) -> None:
+    """
+    A loop for performing health checks against the provided configuration
+    """
     while True:
         for endpoint in config:
             domain_with_port = endpoint["url"].split("//")[-1].split("/")[0]
@@ -62,12 +82,17 @@ def check_health_loop(config: dict, domain_stats: defaultdict) -> None:
                 domain_stats[domain]["up"] += 1
         time.sleep(15)
 
-# Main function to monitor endpoints
+
 def monitor_endpoints(file_path: str) -> None:
+    """
+    Main function to monitor endpoints
+    """
     config = load_config(file_path)
     domain_stats = defaultdict(lambda: {"up": 0, "total": 0})
 
-    check_health_thread = threading.Thread(target=check_health_loop, args=(config, domain_stats))
+    check_health_thread = threading.Thread(
+        target=check_health_loop, args=(config, domain_stats)
+    )
     check_health_thread.start()
 
     while True:
@@ -75,24 +100,27 @@ def monitor_endpoints(file_path: str) -> None:
         # Log cumulative availability percentages
         for domain, stats in domain_stats.items():
             availability = round(100 * stats["up"] / stats["total"])
-            logging.info(f"{domain} has {availability}% availability percentage")
+            logging.info("%s has %s%% availability percentage", domain, availability)
+
 
 def get_logging_conf() -> dict:
-    log_config = {}
-    log_config["level"] = os.environ.get("LOG_LEVEL", "INFO").upper()
-    log_config["format"] = (
+    """
+    Generates a logging configuration dict for the tool
+    """
+    log_conf = {}
+    log_conf["level"] = os.environ.get("LOG_LEVEL", "INFO").upper()
+    log_conf["format"] = (
         "[%(asctime)s] %(levelname)s [%(filename)-s%(funcName)s():%(lineno)s]: %(message)s"
     )
-    log_config["handlers"] = [logging.StreamHandler(sys.stdout)]
+    log_conf["handlers"] = [logging.StreamHandler(sys.stdout)]
     log_file = os.environ.get("LOG_FILE", "")
     if log_file:
-        log_config["handlers"].append(logging.FileHandler(log_file))
-    return log_config
+        log_conf["handlers"].append(logging.FileHandler(log_file))
+    return log_conf
+
 
 # Entry point of the program
 if __name__ == "__main__":
-    import sys
-
     log_config = get_logging_conf()
     logging.basicConfig(**log_config)
 
@@ -104,12 +132,14 @@ if __name__ == "__main__":
     try:
         monitor_endpoints(config_file)
     except KeyboardInterrupt:
-        logging.warning("\nMonitoring stopped by user.")
+        logging.warning("Monitoring stopped by user.")
         sys.exit(0)
     except ConfigException as e:
-        logging.critical(f"unable to parse provided configuration. {e}")
+        logging.critical("unable to parse provided configuration. %s", e)
         sys.exit(1)
+    # pylint: disable=broad-exception-caught
     except Exception as e:
         # generic catch to ensure we always log before the script exits
         logging.exception("unhandled exception while monitoring endpoints")
         sys.exit(1)
+    # pylint: enable=broad-exception-caught
