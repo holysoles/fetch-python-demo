@@ -11,17 +11,20 @@ import requests
 
 class ConfigException(Exception):
     """
-    An exception class that categorizes issues encountered when parsing or validating 
+    An exception class that categorizes issues encountered when parsing or validating
     provided configuration
     """
+
 
 def load_config(file_path: str) -> list[dict]:
     """
     Function to load configuration from the YAML file
     """
+    logging.debug("loading configuration")
     config = []
     with open(file_path, "r", encoding="utf8") as file:
         config = yaml.safe_load(file)
+    logging.debug("configuration loaded. validating config")
 
     # perform config validation
     if not isinstance(config, list):
@@ -39,6 +42,7 @@ def load_config(file_path: str) -> list[dict]:
             raise ConfigException(
                 f"invalid config: endpoint '{endpoint['name']}' does not have required 'url' key"
             ) from e
+    logging.debug("configuration successfully validated")
 
     return config
 
@@ -52,11 +56,13 @@ def check_health(endpoint: dict) -> str:
     headers = endpoint.get("headers")
     body = endpoint.get("body")
 
+    logging.debug('checking availability of %s', endpoint)
     try:
         response = requests.request(
             method, url, headers=headers, json=body, timeout=0.5
         )
         if 200 <= response.status_code < 300:
+            logging.debug('%s tested as UP', endpoint)
             return "UP"
         return "DOWN"
     except requests.exceptions.ReadTimeout:
@@ -90,8 +96,11 @@ def monitor_endpoints(file_path: str) -> None:
     config = load_config(file_path)
     domain_stats = defaultdict(lambda: {"up": 0, "total": 0})
 
+    logging.info("configuration loaded, beginning endpoint monitoring")
     check_health_thread = threading.Thread(
-        target=check_health_loop, args=(config, domain_stats)
+        target=check_health_loop,
+        args=(config, domain_stats),
+        daemon=True,
     )
     check_health_thread.start()
 

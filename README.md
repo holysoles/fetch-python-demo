@@ -44,7 +44,7 @@ In a new shell:
 ```bash
 git clone https://github.com/holysoles/fetch-python-demo.git
 cd fetch-python-demo
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -71,11 +71,11 @@ Set-Location fetch-python-demo
 In a new PowerShell:
 
 ```powershell
-git clone https://github.com/holysoles/fetch-python-demo.git
+git clone https://github.com/holysoles/fetch-python-demo
 Set-Location fetch-python-demo
 python3 -m venv .venv
 .venv\Scripts\activate
-python3 -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 # Usage
@@ -127,3 +127,10 @@ Below is a summary of changes made to this repository, and the justification for
  - `docs: add README and example file`
    - included based on spec
    - provides this document, and an example YAML file for the user to test with for reference
+ - `fix: testing fixes`
+   - identified via testing a fresh install on Windows (dev done on Linux)
+   - fixes
+      - mark the monitoring thread as a daemon thread so Python can exit on keyboard interrupt properly 
+      - add more logging, particularly an info message that says that monitoring has started
+      - pin pyyaml to version that can install on windows (see https://github.com/yaml/pyyaml/issues/601)
+      - some cleanup in the install docs
